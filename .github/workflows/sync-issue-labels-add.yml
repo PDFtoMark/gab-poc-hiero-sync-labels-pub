@@ -1,0 +1,64 @@
+name: Sync Linked Issue Labels - Apply
+
+on:
+  workflow_run:
+    workflows: ["Sync Linked Issue Labels - Compute"]
+    types: [completed]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.workflow_run.id }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  apply:
+    if: github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      issues: write
+      actions: read
+
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
+        with:
+          egress-policy: audit
+
+      - name: Download Artifact
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        continue-on-error: true
+        with:
+          name: pr-labels-data
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Apply Labels
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const fs = require('fs');
+
+            if (!fs.existsSync('labels.json')) {
+               console.log("No payload file found. Nothing to apply.");
+               return;
+            }
+
+            const data = JSON.parse(fs.readFileSync('labels.json', 'utf8'));
+
+            if (!data.labels || data.labels.length === 0) {
+              console.log(`SKIPPING: PR #${data.pr_number} already has all labels or no labels were found.`);
+              return;
+            }
+
+            console.log(`Applying labels to PR #${data.pr_number}: ${data.labels.join(', ')}`);
+
+            await github.rest.issues.addLabels({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: data.pr_number,
+              labels: data.labels
+            });
+            console.log("Successfully applied labels!");
