@@ -1,0 +1,17 @@
+# Replica of hiero-sdk-python .github/workflows/approved-issues.yml (gating job only)
+name: "Approve Issues"
+on:
+  issues:
+    types: [labeled]
+permissions:
+  issues: write
+  contents: read
+jobs:
+  approve:
+    if: github.event.label.name == 'approved'
+    name: Approve Issue
+    runs-on: ubuntu-latest
+    steps:
+      - name: Approval comment
+        run: |
+          echo "::notice::Maintainer-only approval workflow ran for issue #${{ github.event.issue.number }} (label applied by attacker-controlled artifact path)"
